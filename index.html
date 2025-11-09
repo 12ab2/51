@@ -1,0 +1,2613 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>高级心情日记本</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // 性能优化工具函数
+        (function() {
+            // 防抖函数
+            window.debounce = function(func, wait) {
+                let timeout;
+                return function(...args) {
+                    const context = this;
+                    clearTimeout(timeout);
+                    timeout = setTimeout(() => func.apply(context, args), wait);
+                };
+            };
+            
+            // 节流函数
+            window.throttle = function(func, limit) {
+                let inThrottle;
+                return function(...args) {
+                    const context = this;
+                    if (!inThrottle) {
+                        func.apply(context, args);
+                        inThrottle = true;
+                        setTimeout(() => inThrottle = false, limit);
+                    }
+                };
+            };
+            
+            // 滚动性能优化
+            const optimizeScrolling = () => {
+                // 滚动期间暂停复杂动画
+                let scrollTimeout;
+                const handleScroll = throttle(() => {
+                    document.body.classList.add('is-scrolling');
+                    
+                    clearTimeout(scrollTimeout);
+                    scrollTimeout = setTimeout(() => {
+                        document.body.classList.remove('is-scrolling');
+                    }, 100);
+                }, 50);
+                
+                window.addEventListener('scroll', handleScroll, { passive: true });
+                
+                // 触摸事件优化
+                window.addEventListener('touchstart', () => {}, { passive: true });
+                window.addEventListener('touchmove', () => {}, { passive: true });
+                
+                // 减少动画在滚动时的性能消耗
+                const style = document.createElement('style');
+                style.textContent = `
+                    body.is-scrolling .mood-option, 
+                    body.is-scrolling .card, 
+                    body.is-scrolling .tab {
+                        animation-play-state: paused !important;
+                        transition: none !important;
+                    }
+                    
+                    /* 滚动时禁用某些昂贵效果 */
+                    body.is-scrolling .glass-card, 
+                    body.is-scrolling .container {
+                        backdrop-filter: blur(2px) !important;
+                    }
+                `;
+                document.head.appendChild(style);
+            };
+            
+            // 页面加载完成后应用优化
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', optimizeScrolling);
+            } else {
+                optimizeScrolling();
+            }
+        })();
+    </script>
+    <style>
+        :root {
+            /* 主题颜色变量 */
+            --primary-color: #667eea;
+            --secondary-color: #764ba2;
+            
+            /* 情绪颜色 */
+            --happy-color: #4CAF50;
+            --excited-color: #FF9800;
+            --calm-color: #2196F3;
+            --neutral-color: #9E9E9E;
+            --anxious-color: #FFC107;
+            --sad-color: #2196F3;
+            --angry-color: #F44336;
+            --tired-color: #795548;
+            
+            /* 文本颜色 */
+            --light-bg: #f8f9fa;
+            --dark-text: #2c3e50;
+            --light-text: #6c757d;
+            --white-text: #ffffff;
+            
+            /* 玻璃拟态效果 */
+            --glass-bg: rgba(255, 255, 255, 0.7);
+            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            --glass-border: rgba(255, 255, 255, 0.3);
+            --glass-backdrop: blur(10px);
+            
+            /* 尺寸和间距 */
+            --border-radius: 12px;
+            --card-border-radius: 16px;
+            --button-border-radius: 8px;
+            --spacing-xs: 5px;
+            --spacing-sm: 10px;
+            --spacing-md: 20px;
+            --spacing-lg: 30px;
+            --spacing-xl: 40px;
+            
+            /* 阴影和过渡 */
+            --shadow: 0 6px 20px rgba(0, 0, 0, 0.1);
+            --shadow-hover: 0 10px 30px rgba(0, 0, 0, 0.15);
+            --transition: all 0.3s ease;
+            --transition-fast: all 0.15s ease;
+            --transition-slow: all 0.5s ease;
+        }
+        
+        /* 暗色主题变量 */
+        :root.dark-theme {
+            --primary-color: #8896fc;
+            --secondary-color: #9b77d0;
+            --light-bg: #1a1a1a;
+            --dark-text: #e0e0e0;
+            --light-text: #b0b0b0;
+            --glass-bg: rgba(26, 26, 26, 0.7);
+            --glass-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+            --glass-border: rgba(255, 255, 255, 0.05);
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+            background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            color: var(--dark-text);
+            line-height: 1.6;
+            min-height: 100vh;
+            padding: 20px;
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(102, 126, 234, 0.05) 0%, transparent 25%),
+                radial-gradient(circle at 75% 75%, rgba(118, 75, 162, 0.05) 0%, transparent 25%);
+            background-attachment: fixed;
+            transition: var(--transition-slow);
+            will-change: scroll-position;
+            touch-action: manipulation;
+        }
+        
+        /* 滚动性能优化 - 滚动容器 */
+        .scroll-container {
+            will-change: scroll-position;
+            contain: layout style paint;
+            -webkit-overflow-scrolling: touch;
+            overflow-x: hidden;
+        }
+        
+        /* 暗色主题下的body背景 */
+        :root.dark-theme body {
+            background: linear-gradient(135deg, #121212 0%, #1e1e1e 100%);
+            background-image: 
+                radial-gradient(circle at 25% 25%, rgba(102, 126, 234, 0.05) 0%, transparent 25%),
+                radial-gradient(circle at 75% 75%, rgba(118, 75, 162, 0.05) 0%, transparent 25%);
+        }
+        
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            border-radius: var(--card-border-radius);
+            padding: var(--spacing-lg);
+            box-shadow: var(--shadow);
+            animation: fadeIn 0.6s ease-in;
+            
+            /* 玻璃拟态效果 - 优化性能 */
+            background: var(--glass-bg);
+            backdrop-filter: blur(6px); /* 减少模糊半径 */
+            -webkit-backdrop-filter: blur(6px);
+            border: 1px solid var(--glass-border);
+            transition: var(--transition);
+            transform: translateZ(0); /* 启用硬件加速 */
+            will-change: transform;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        h1 {
+            color: var(--primary-color);
+            margin-bottom: var(--spacing-lg);
+            text-align: center;
+            font-size: 2.5rem;
+            font-weight: 700;
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+            transition: var(--transition);
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            padding: var(--spacing-sm) 0;
+        }
+        
+        /* 暗色主题下的标题 */
+        :root.dark-theme h1 {
+            text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+        }
+        
+        .tabs {
+            display: flex;
+            gap: var(--spacing-sm);
+            margin-bottom: var(--spacing-lg);
+            overflow-x: auto;
+            padding-bottom: var(--spacing-sm);
+            border-bottom: none;
+            position: relative;
+            z-index: 10;
+        }
+        
+        /* 滚动条样式 */
+        .tabs::-webkit-scrollbar {
+            height: 6px;
+        }
+        
+        .tabs::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 3px;
+        }
+        
+        .tabs::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.5);
+            border-radius: 3px;
+        }
+        
+        .tabs::-webkit-scrollbar-thumb:hover {
+            background: rgba(102, 126, 234, 0.7);
+        }
+        
+        .tab {
+            flex: 1;
+            min-width: 120px;
+            padding: 15px 20px;
+            background: rgba(255, 255, 255, 0.5);
+            border: none;
+            border-radius: var(--button-border-radius);
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: 500;
+            color: var(--dark-text);
+            transition: var(--transition);
+            backdrop-filter: var(--glass-backdrop);
+            -webkit-backdrop-filter: var(--glass-backdrop);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+            position: relative;
+            overflow: hidden;
+            border-bottom: none;
+        }
+        
+        /* 暗色主题下的标签样式 */
+        :root.dark-theme .tab {
+            background: rgba(40, 40, 40, 0.5);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            color: var(--light-text);
+        }
+        
+        .tab::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: all 0.5s ease;
+        }
+        
+        .tab:hover::before {
+            left: 100%;
+        }
+        
+        .tab:hover {
+            color: var(--primary-color);
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.1);
+        }
+        
+        .tab.active {
+            background: var(--primary-color);
+            color: white;
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.3);
+            transform: translateY(-2px);
+        }
+        
+        .tab-content {
+            display: none;
+        }
+        
+        .tab-content.active {
+            display: block;
+            animation: slideIn 0.4s ease-out;
+        }
+        
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .card {
+            border-radius: var(--card-border-radius);
+            padding: var(--spacing-lg);
+            margin-bottom: var(--spacing-lg);
+            transition: var(--transition);
+            background: var(--glass-bg);
+            backdrop-filter: var(--glass-backdrop);
+            -webkit-backdrop-filter: var(--glass-backdrop);
+            border: 1px solid var(--glass-border);
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 卡片顶部装饰条 */
+        .card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, var(--primary-color), var(--secondary-color));
+        }
+        
+        /* 卡片悬停效果 */
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-hover);
+        }
+        
+        /* 卡片标题样式 */
+        .card h2, .card h3 {
+            color: var(--dark-text);
+            margin-bottom: var(--spacing-md);
+            font-weight: 600;
+            position: relative;
+            display: inline-block;
+        }
+        
+        .card h2::after, .card h3::after {
+            content: '';
+            position: absolute;
+            left: 0;
+            bottom: -5px;
+            width: 60%;
+            height: 3px;
+            background: var(--primary-color);
+            border-radius: 3px;
+            opacity: 0.7;
+        }
+        
+        /* 日记表单样式 */
+        .entry-form {
+            display: flex;
+            flex-direction: column;
+            gap: var(--spacing-md);
+        }
+        
+        .entry-form label {
+            font-weight: 500;
+            color: var(--dark-text);
+            margin-bottom: var(--spacing-xs);
+        }
+        
+        .entry-form textarea {
+            width: 100%;
+            min-height: 150px;
+            padding: var(--spacing-md);
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            border-radius: var(--border-radius);
+            font-size: 16px;
+            font-family: inherit;
+            line-height: 1.5;
+            transition: var(--transition);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: var(--glass-backdrop);
+            resize: vertical;
+        }
+        
+        /* 暗色主题下的textarea */
+        :root.dark-theme .entry-form textarea {
+            background: rgba(40, 40, 40, 0.8);
+            color: var(--dark-text);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+        
+        .entry-form textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+            transform: translateY(-1px);
+        }
+        
+        .entry-form textarea::placeholder {
+            color: var(--light-text);
+        }
+        
+        .card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.15);
+        }
+        
+        .card h2 {
+            margin-bottom: 20px;
+            color: var(--primary-color);
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .card h3 {
+            margin-bottom: 15px;
+            color: var(--secondary-color);
+            font-size: 20px;
+        }
+        
+        .entry-form {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .entry-form textarea {
+            width: 100%;
+            height: 180px;
+            padding: 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 8px;
+            font-size: 16px;
+            resize: vertical;
+            font-family: inherit;
+            transition: var(--transition);
+        }
+        
+        .entry-form textarea:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        /* 情绪选择器 */
+        .mood-selector {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            margin-bottom: var(--spacing-lg);
+            justify-content: center;
+        }
+        
+        /* 情绪选项 - 表情在上文字在下的样式 */
+        .mood-option {
+            min-width: 100px;
+            padding: 20px 15px;
+            border: 2px solid transparent;
+            border-radius: 12px;
+            background: rgba(255, 255, 255, 0.9);
+            cursor: pointer;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+            font-size: 14px;
+            font-weight: 500;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            transform: translateZ(0); /* 启用硬件加速 */
+            will-change: transform, box-shadow;
+            contain: layout style;
+        }
+        
+        /* 暗色主题下的情绪选项 */
+        :root.dark-theme .mood-option {
+            background: rgba(40, 40, 40, 0.9);
+            color: var(--light-text);
+        }
+        
+        /* 表情符号样式 - 优化性能 */
+        .mood-option::before {
+            content: attr(data-emoji);
+            font-size: 32px;
+            display: block;
+            will-change: transform;
+            transition: transform 0.2s ease;
+        }
+        
+        /* 情绪特效预览 - 悬停时显示 */
+        .mood-option:hover::after {
+            content: attr(data-effect-preview);
+            position: absolute;
+            top: -25px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            white-space: nowrap;
+            z-index: 10;
+            pointer-events: none;
+        }
+        
+        /* 快乐情绪 - 金色烟花效果 */
+        .mood-option.happy.active,
+        .mood-option.happy.selected {
+            animation: fireworks 0.8s ease-out;
+        }
+        
+        /* 兴奋情绪 - 彩色礼花效果 */
+        .mood-option.excited.active,
+        .mood-option.excited.selected {
+            animation: confettiBurst 0.8s ease-out;
+        }
+        
+        /* 平静情绪 - 水波纹效果 */
+        .mood-option.calm.active,
+        .mood-option.calm.selected {
+            animation: ripple 1s ease-out;
+        }
+        
+        /* 爱意情绪 - 爱心气泡效果 */
+        .mood-option.love.active,
+        .mood-option.love.selected {
+            animation: heartFloat 1s ease-out;
+        }
+        
+        /* 悲伤情绪 - 雨滴效果 */
+        .mood-option.sad.active,
+        .mood-option.sad.selected {
+            animation: rainDrop 1s ease-out;
+        }
+        
+        /* 愤怒情绪 - 火焰效果 */
+        .mood-option.angry.active,
+        .mood-option.angry.selected {
+            animation: firePulse 0.6s ease-out;
+            box-shadow: 0 0 20px rgba(255, 69, 0, 0.6);
+        }
+        
+        /* 焦虑情绪 - 电流效果 */
+        .mood-option.anxious.active,
+        .mood-option.anxious.selected {
+            animation: electricShock 0.5s ease-out;
+        }
+        
+        /* 压力情绪 - 碎片效果 */
+        .mood-option.stressed.active,
+        .mood-option.stressed.selected {
+            animation: fragmentReform 1s ease-out;
+        }
+        
+        /* 动画定义 - 性能优化版 */
+        @keyframes fireworks {
+            0% {
+                transform: scale(1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            }
+            50% {
+                transform: scale(1.1);
+                box-shadow: 0 0 15px rgba(255, 215, 0, 0.5);
+            }
+            100% {
+                transform: scale(1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            }
+        }
+        
+        @keyframes confettiBurst {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+            }
+        }
+        
+        /* 性能优化 - 仅在需要时启用复杂效果 */
+        @media (prefers-reduced-motion: reduce) {
+            *,
+            *::before,
+            *::after {
+                animation-duration: 0.01ms !important;
+                animation-iteration-count: 1 !important;
+                transition-duration: 0.01ms !important;
+                scroll-behavior: auto !important;
+            }
+        }
+        
+        /* 减少重绘和重排 */
+        * {
+            will-change: auto;
+        }
+        
+        /* 硬件加速关键元素 */
+        .card, .tab, .btn {
+            transform: translateZ(0);
+            backface-visibility: hidden;
+            perspective: 1000px;
+        }
+        
+        @keyframes ripple {
+            0% {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            }
+            50% {
+                box-shadow: 0 0 0 5px rgba(135, 206, 250, 0.5), 0 0 0 10px rgba(135, 206, 250, 0.3);
+            }
+            100% {
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            }
+        }
+        
+        @keyframes heartFloat {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.05);
+                background-color: rgba(255, 105, 180, 0.2);
+            }
+        }
+        
+        @keyframes rainDrop {
+            0%, 100% {
+                transform: scale(1);
+                background-color: rgba(255, 255, 255, 0.9);
+            }
+            50% {
+                transform: scale(0.95) translateY(5px);
+                background-color: rgba(173, 216, 230, 0.3);
+            }
+        }
+        
+        @keyframes firePulse {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(1.1) translateY(-5px);
+            }
+        }
+        
+        @keyframes electricShock {
+            0%, 100% {
+                transform: scale(1);
+                box-shadow: 0 4px 12px rgba(0, 0, 0, 0.08);
+            }
+            25%, 75% {
+                transform: scale(1.02) rotate(1deg);
+                box-shadow: 0 0 15px rgba(70, 130, 180, 0.6);
+            }
+            50% {
+                transform: scale(1.02) rotate(-1deg);
+                box-shadow: 0 0 15px rgba(70, 130, 180, 0.8);
+            }
+        }
+        
+        @keyframes fragmentReform {
+            0%, 100% {
+                transform: scale(1);
+            }
+            50% {
+                transform: scale(0.95) rotate(2deg);
+            }
+        }
+        
+        /* 情绪选项悬浮效果 - 简化提升性能 */
+        .mood-option:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.12);
+            will-change: transform;
+        }
+        
+        /* 鼠标触碰时表情动画 - 简化提升性能 */
+        .mood-option:hover::before {
+            animation: emojiBounce 0.4s ease-out;
+        }
+        
+        @keyframes emojiBounce {
+            0% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-6px) scale(1.1); }
+            100% { transform: translateY(0) scale(1); }
+        }
+        
+        /* 情绪选中效果 - 简化提升性能 */
+        .mood-option.selected {
+            transform: translateY(-3px) scale(1.03);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.18);
+            color: white;
+            z-index: 1;
+            will-change: transform;
+        }
+        
+        /* 选中时的表情动画 - 优化性能 */
+        .mood-option.selected::before {
+            animation: emojiJump 0.6s ease-out infinite alternate;
+        }
+        
+        @keyframes emojiJump {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-4px); }
+        }
+        
+        /* 不同情绪的基础样式 */
+        .mood-option.happy {
+            background: rgba(255, 245, 235, 0.9);
+        }
+        
+        .mood-option.excited {
+            background: rgba(255, 235, 245, 0.9);
+        }
+        
+        .mood-option.calm {
+            background: rgba(235, 245, 255, 0.9);
+        }
+        
+        .mood-option.neutral {
+            background: rgba(245, 245, 245, 0.9);
+        }
+        
+        .mood-option.anxious {
+            background: rgba(255, 255, 235, 0.9);
+        }
+        
+        .mood-option.sad {
+            background: rgba(235, 240, 255, 0.9);
+        }
+        
+        .mood-option.angry {
+            background: rgba(255, 235, 235, 0.9);
+        }
+        
+        .mood-option.tired {
+            background: rgba(240, 235, 230, 0.9);
+        }
+        
+        /* 暗色主题下的情绪基础样式 */
+        :root.dark-theme .mood-option.happy {
+            background: rgba(255, 193, 7, 0.1);
+        }
+        
+        :root.dark-theme .mood-option.excited {
+            background: rgba(233, 30, 99, 0.1);
+        }
+        
+        :root.dark-theme .mood-option.calm {
+            background: rgba(33, 150, 243, 0.1);
+        }
+        
+        :root.dark-theme .mood-option.neutral {
+            background: rgba(158, 158, 158, 0.1);
+        }
+        
+        :root.dark-theme .mood-option.anxious {
+            background: rgba(255, 152, 0, 0.1);
+        }
+        
+        :root.dark-theme .mood-option.sad {
+            background: rgba(63, 81, 181, 0.1);
+        }
+        
+        :root.dark-theme .mood-option.angry {
+            background: rgba(244, 67, 54, 0.1);
+        }
+        
+        :root.dark-theme .mood-option.tired {
+            background: rgba(121, 85, 72, 0.1);
+        }
+        
+        /* 不同情绪的选中样式 */
+        .mood-option.happy.selected {
+            background: linear-gradient(135deg, var(--happy-color), #5ccc60);
+        }
+        
+        .mood-option.excited.selected {
+            background: linear-gradient(135deg, var(--excited-color), #ffb74d);
+        }
+        
+        .mood-option.calm.selected {
+            background: linear-gradient(135deg, var(--calm-color), #4fc3f7);
+        }
+        
+        .mood-option.neutral.selected {
+            background: linear-gradient(135deg, var(--neutral-color), #bdbdbd);
+        }
+        
+        .mood-option.anxious.selected {
+            background: linear-gradient(135deg, var(--anxious-color), #ffd54f);
+        }
+        
+        .mood-option.sad.selected {
+            background: linear-gradient(135deg, var(--sad-color), #64b5f6);
+        }
+        
+        .mood-option.angry.selected {
+            background: linear-gradient(135deg, var(--angry-color), #ef5350);
+        }
+        
+        .mood-option.tired.selected {
+            background: linear-gradient(135deg, var(--tired-color), #9e7669);
+        }
+        
+        /* 情绪选项的脉冲动画 */
+        .mood-option.selected::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.4);
+            transform: translate(-50%, -50%);
+            animation: pulse 2s ease-out infinite;
+        }
+        
+        @keyframes float {
+            0%, 100% { transform: translateY(0) scale(1); }
+            50% { transform: translateY(-5px) scale(1.02); }
+        }
+        
+        @keyframes pulse {
+            0% {
+                width: 0;
+                height: 0;
+                opacity: 0.4;
+            }
+            100% {
+                width: 300px;
+                height: 300px;
+                opacity: 0;
+            }
+        }
+        
+        /* 标签输入框样式 */
+        .tags-input {
+            display: flex;
+            flex-wrap: wrap;
+            gap: var(--spacing-sm);
+            padding: var(--spacing-md);
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            border-radius: var(--border-radius);
+            min-height: 56px;
+            transition: var(--transition);
+            background: rgba(255, 255, 255, 0.6);
+            backdrop-filter: var(--glass-backdrop);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* 暗色主题下的标签输入框 */
+        :root.dark-theme .tags-input {
+            background: rgba(40, 40, 40, 0.6);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+        
+        /* 标签输入框聚焦效果 */
+        .tags-input:focus-within {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+            transform: translateY(-1px);
+        }
+        
+        /* 标签样式 */
+        .tag {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            padding: 6px 12px;
+            border-radius: 50px;
+            font-size: 14px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+            animation: tagSlideIn 0.3s ease-out;
+        }
+        
+        /* 标签悬浮效果 */
+        .tag:hover {
+            transform: scale(1.05);
+            box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* 移除标签按钮 */
+        .tag-remove {
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            transition: var(--transition);
+        }
+        
+        .tag-remove:hover {
+            background: rgba(255, 255, 255, 0.4);
+            transform: rotate(45deg);
+        }
+        
+        /* 标签输入字段 */
+        .tag-input-field {
+            border: none;
+            outline: none;
+            flex-grow: 1;
+            min-width: 120px;
+            font-size: 14px;
+            background: transparent;
+            color: var(--dark-text);
+            font-family: inherit;
+        }
+        
+        /* 暗色主题下的标签输入字段 */
+        :root.dark-theme .tag-input-field {
+            color: var(--light-text);
+        }
+        
+        /* 主按钮样式 */
+        .entry-form button {
+            background: linear-gradient(135deg, var(--primary-color), var(--secondary-color));
+            color: white;
+            border: none;
+            padding: 14px 28px;
+            border-radius: var(--button-border-radius);
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: var(--transition);
+            align-self: flex-start;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.2);
+            margin-top: var(--spacing-sm);
+        }
+        
+        /* 按钮悬浮效果 */
+        .entry-form button:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+        }
+        
+        /* 按钮点击效果 */
+        .entry-form button:active {
+            transform: translateY(0) scale(0.98);
+        }
+        
+        /* 按钮加载状态 */
+        .entry-form button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        
+        /* 按钮发光效果 */
+        .entry-form button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .entry-form button:hover::after {
+            width: 300px;
+            height: 300px;
+        }
+        
+        /* 标签滑入动画 */
+        @keyframes tagSlideIn {
+            from {
+                opacity: 0;
+                transform: translateX(-10px) scale(0.9);
+            }
+            to {
+                opacity: 1;
+                transform: translateX(0) scale(1);
+            }
+        }
+        
+        /* 情绪显示区域 */
+        .emotion-display {
+            margin-top: var(--spacing-lg);
+            padding: var(--spacing-lg);
+            border-radius: var(--card-border-radius);
+            border-left: 5px solid var(--primary-color);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            animation: fadeInUp 0.5s ease-out;
+        }
+        
+        /* 暗色主题下的情绪显示区域 */
+        :root.dark-theme .emotion-display {
+            background: rgba(40, 40, 40, 0.7);
+        }
+        
+        .emotion-display:hover {
+            transform: translateY(-2px);
+            box-shadow: var(--shadow-hover);
+        }
+        
+        .emotion-header {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-md);
+        }
+        
+        .emotion-badge {
+            padding: 8px 16px;
+            border-radius: 50px;
+            color: white;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+        }
+        
+        /* AI回应区域 */
+        .ai-response {
+            padding: var(--spacing-md);
+            border-radius: var(--border-radius);
+            border-left: 4px solid #4CAF50;
+            margin-top: var(--spacing-md);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: var(--glass-backdrop);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 暗色主题下的AI回应 */
+        :root.dark-theme .ai-response {
+            background: rgba(40, 40, 40, 0.8);
+        }
+        
+        .ai-response h4 {
+            color: #4CAF50;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-weight: 600;
+        }
+        
+        /* 历史记录容器 */
+        .entries-container {
+            max-height: 600px;
+            overflow-y: auto;
+            padding-right: var(--spacing-xs);
+        }
+        
+        /* 自定义滚动条 */
+        .entries-container::-webkit-scrollbar {
+            width: 8px;
+        }
+        
+        .entries-container::-webkit-scrollbar-track {
+            background: rgba(0, 0, 0, 0.05);
+            border-radius: 4px;
+        }
+        
+        .entries-container::-webkit-scrollbar-thumb {
+            background: rgba(102, 126, 234, 0.5);
+            border-radius: 4px;
+            transition: background var(--transition);
+        }
+        
+        .entries-container::-webkit-scrollbar-thumb:hover {
+            background: rgba(102, 126, 234, 0.7);
+        }
+        
+        /* 历史记录条目 */
+        .entry-item {
+            border-radius: var(--card-border-radius);
+            padding: var(--spacing-md);
+            margin-bottom: var(--spacing-md);
+            transition: var(--transition);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 暗色主题下的历史记录条目 */
+        :root.dark-theme .entry-item {
+            background: rgba(40, 40, 40, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* 历史记录条目悬浮效果 */
+        .entry-item:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-hover);
+        }
+        
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: var(--spacing-sm);
+        }
+        
+        .entry-date {
+            color: var(--light-text);
+            font-size: 14px;
+            font-weight: 500;
+        }
+        
+        .entry-content {
+            margin-bottom: var(--spacing-md);
+            line-height: 1.7;
+            color: var(--dark-text);
+        }
+        
+        /* 暗色主题下的内容文本 */
+        :root.dark-theme .entry-content {
+            color: var(--light-text);
+        }
+        
+        .entry-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: var(--spacing-sm);
+        }
+        
+        .entry-tag {
+            background: rgba(102, 126, 234, 0.1);
+            padding: 4px 10px;
+            border-radius: 50px;
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--primary-color);
+            transition: var(--transition);
+        }
+        
+        /* 暗色主题下的标签 */
+        :root.dark-theme .entry-tag {
+            background: rgba(102, 126, 234, 0.2);
+        }
+        
+        /* 向上淡入动画 */
+        @keyframes fadeInUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        /* 图表容器 */
+        .chart-container {
+            height: 300px;
+            margin-top: var(--spacing-lg);
+            position: relative;
+        }
+        
+        /* 可视化网格 */
+        .visualization-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: var(--spacing-lg);
+            margin-top: var(--spacing-lg);
+        }
+        
+        /* 图表包装器 */
+        .chart-wrapper {
+            padding: var(--spacing-lg);
+            border-radius: var(--card-border-radius);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 暗色主题下的图表包装器 */
+        :root.dark-theme .chart-wrapper {
+            background: rgba(40, 40, 40, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* 图表包装器悬浮效果 */
+        .chart-wrapper:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-hover);
+        }
+        
+        .chart-wrapper h3 {
+            text-align: center;
+            margin-bottom: var(--spacing-md);
+            color: var(--dark-text);
+            font-weight: 600;
+            position: relative;
+            display: inline-block;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        /* 暗色主题下的图表标题 */
+        :root.dark-theme .chart-wrapper h3 {
+            color: var(--light-text);
+        }
+        
+        /* 搜索栏 */
+        .search-bar {
+            position: relative;
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        .search-bar input {
+            width: 100%;
+            padding: var(--spacing-md) 45px var(--spacing-md) var(--spacing-md);
+            border: 2px solid rgba(102, 126, 234, 0.2);
+            border-radius: var(--button-border-radius);
+            font-size: 16px;
+            transition: var(--transition);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+        }
+        
+        /* 暗色主题下的搜索框 */
+        :root.dark-theme .search-bar input {
+            background: rgba(40, 40, 40, 0.7);
+            border-color: rgba(102, 126, 234, 0.3);
+            color: var(--light-text);
+        }
+        
+        .search-bar input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.15);
+            transform: translateY(-1px);
+        }
+        
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: var(--light-text);
+            font-size: 18px;
+            transition: var(--transition);
+        }
+        
+        .search-bar input:focus + .search-icon {
+            color: var(--primary-color);
+            transform: translateY(-50%) scale(1.1);
+        }
+        
+        /* 导出按钮 */
+        .export-button {
+            background: linear-gradient(135deg, #4CAF50, #45a049);
+            color: white;
+            border: none;
+            padding: var(--spacing-md) var(--spacing-lg);
+            border-radius: var(--button-border-radius);
+            cursor: pointer;
+            font-weight: 600;
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+            margin-right: var(--spacing-sm);
+        }
+        
+        .export-button:hover {
+            transform: translateY(-2px) scale(1.02);
+            box-shadow: 0 6px 20px rgba(76, 175, 80, 0.3);
+        }
+        
+        .export-button:active {
+            transform: translateY(0) scale(0.98);
+        }
+        
+        /* 导出按钮发光效果 */
+        .export-button::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 0;
+            height: 0;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.3);
+            transform: translate(-50%, -50%);
+            transition: width 0.6s, height 0.6s;
+        }
+        
+        .export-button:hover::after {
+            width: 200px;
+            height: 200px;
+        }
+        
+        /* 统计摘要网格 */
+        .stats-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: var(--spacing-md);
+            margin-bottom: var(--spacing-lg);
+        }
+        
+        /* 统计卡片 */
+        .stat-card {
+            padding: var(--spacing-lg);
+            border-radius: var(--card-border-radius);
+            text-align: center;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 暗色主题下的统计卡片 */
+        :root.dark-theme .stat-card {
+            background: rgba(40, 40, 40, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* 统计卡片悬浮效果 */
+        .stat-card:hover {
+            transform: translateY(-3px);
+            box-shadow: var(--shadow-hover);
+        }
+        
+        /* 统计数值 */
+        .stat-value {
+            font-size: 32px;
+            font-weight: 700;
+            color: var(--primary-color);
+            display: block;
+            transition: var(--transition);
+        }
+        
+        .stat-card:hover .stat-value {
+            transform: scale(1.05);
+            text-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+        }
+        
+        /* 统计标签 */
+        .stat-label {
+            color: var(--light-text);
+            font-size: 14px;
+            margin-top: var(--spacing-xs);
+            font-weight: 500;
+        }
+        
+        /* 无数据消息 */
+        .no-data-message {
+            text-align: center;
+            padding: var(--spacing-xl);
+            color: var(--light-text);
+            font-style: italic;
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            border-radius: var(--card-border-radius);
+            box-shadow: var(--shadow);
+            margin: var(--spacing-lg) 0;
+        }
+        
+        /* 暗色主题下的无数据消息 */
+        :root.dark-theme .no-data-message {
+            background: rgba(40, 40, 40, 0.7);
+        }
+        
+        /* 加载状态 */
+        .loading {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: var(--spacing-lg);
+            min-height: 200px;
+        }
+        
+        /* 加载动画 */
+        .loading-spinner {
+            width: 48px;
+            height: 48px;
+            border: 4px solid rgba(102, 126, 234, 0.2);
+            border-top: 4px solid var(--primary-color);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            position: relative;
+        }
+        
+        /* 加载动画额外效果 */
+        .loading-spinner::before {
+            content: '';
+            position: absolute;
+            top: -8px;
+            left: -8px;
+            right: -8px;
+            bottom: -8px;
+            border: 2px solid rgba(102, 126, 234, 0.1);
+            border-radius: 50%;
+            animation: spinReverse 1.5s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        @keyframes spinReverse {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(-360deg); }
+        }
+        
+        /* 心情强度 */
+        .mood-intensity {
+            margin-top: var(--spacing-sm);
+        }
+        
+        .intensity-label {
+            font-size: 14px;
+            color: var(--light-text);
+            margin-bottom: var(--spacing-xs);
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        /* 强度条 */
+        .intensity-bar {
+            height: 8px;
+            background: rgba(102, 126, 234, 0.1);
+            border-radius: 4px;
+            overflow: hidden;
+            margin-top: var(--spacing-xs);
+            position: relative;
+        }
+        
+        /* 暗色主题下的强度条 */
+        :root.dark-theme .intensity-bar {
+            background: rgba(102, 126, 234, 0.2);
+        }
+        
+        /* 强度填充 */
+        .intensity-fill {
+            height: 100%;
+            border-radius: 4px;
+            transition: width 0.7s cubic-bezier(0.4, 0, 0.2, 1);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        /* 强度填充发光效果 */
+        .intensity-fill::after {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+            animation: shimmer 2s infinite;
+        }
+        
+        @keyframes shimmer {
+            0% { left: -100%; }
+            100% { left: 100%; }
+        }
+        
+        /* 指导问题区域 */
+        .guidance-questions {
+            padding: var(--spacing-md);
+            border-radius: var(--card-border-radius);
+            border-left: 4px solid #ffc107;
+            margin-bottom: var(--spacing-lg);
+            background: rgba(255, 243, 205, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            border-top: 1px solid rgba(255, 255, 255, 0.3);
+            border-right: 1px solid rgba(255, 255, 255, 0.3);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+        
+        /* 暗色主题下的指导问题区域 */
+        :root.dark-theme .guidance-questions {
+            background: rgba(255, 193, 7, 0.1);
+            border-left: 4px solid #ffc107;
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+        }
+        
+        /* 指导问题标题 */
+        .guidance-questions h4 {
+            color: #856404;
+            margin-bottom: var(--spacing-sm);
+            font-weight: 600;
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-xs);
+        }
+        
+        :root.dark-theme .guidance-questions h4 {
+            color: #ffc107;
+        }
+        
+        /* 指导问题列表 */
+        .guidance-questions ul {
+            list-style: none;
+            padding-left: var(--spacing-sm);
+        }
+        
+        .guidance-questions li {
+            margin-bottom: var(--spacing-xs);
+            color: #856404;
+            font-size: 14px;
+            position: relative;
+            padding-left: 18px;
+            transition: var(--transition);
+        }
+        
+        :root.dark-theme .guidance-questions li {
+            color: #ffda79;
+        }
+        
+        .guidance-questions li::before {
+            content: "💡";
+            position: absolute;
+            left: 0;
+            top: 0;
+            font-size: 12px;
+            animation: pulse-light 2s infinite;
+        }
+        
+        @keyframes pulse-light {
+            0% { opacity: 0.7; }
+            50% { opacity: 1; transform: scale(1.1); }
+            100% { opacity: 0.7; }
+        }
+        
+        /* 提醒设置 */
+        .reminder-setting {
+            display: flex;
+            align-items: center;
+            gap: var(--spacing-sm);
+            margin-top: var(--spacing-md);
+            padding: var(--spacing-md);
+            background: rgba(255, 255, 255, 0.7);
+            backdrop-filter: var(--glass-backdrop);
+            border-radius: var(--card-border-radius);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+        
+        /* 暗色主题下的提醒设置 */
+        :root.dark-theme .reminder-setting {
+            background: rgba(40, 40, 40, 0.7);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        
+        /* 复选框样式 */
+        .reminder-setting input[type="checkbox"] {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+            border: 2px solid var(--primary-color);
+            background: transparent;
+            cursor: pointer;
+            position: relative;
+            transition: var(--transition);
+            appearance: none;
+            -webkit-appearance: none;
+        }
+        
+        .reminder-setting input[type="checkbox"]:checked {
+            background: var(--primary-color);
+        }
+        
+        .reminder-setting input[type="checkbox"]:checked::after {
+            content: "✓";
+            position: absolute;
+            color: white;
+            font-size: 14px;
+            font-weight: bold;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+        }
+        
+        /* 选择框样式 */
+        .reminder-setting select {
+            padding: var(--spacing-sm);
+            border-radius: var(--border-radius);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+            background: rgba(255, 255, 255, 0.8);
+            backdrop-filter: var(--glass-backdrop);
+            font-size: 14px;
+            transition: var(--transition);
+            cursor: pointer;
+        }
+        
+        :root.dark-theme .reminder-setting select {
+            background: rgba(40, 40, 40, 0.8);
+            border: 1px solid rgba(102, 126, 234, 0.5);
+            color: white;
+        }
+        
+        .reminder-setting select:hover {
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+        
+        .reminder-setting select:focus {
+            outline: none;
+            border-color: var(--primary-color);
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.2);
+        }
+        
+        /* 响应式设计 */
+        @media (max-width: 768px) {
+            /* 调整容器内边距 */
+            .container {
+                padding: var(--spacing-lg);
+            }
+            
+            /* 标签栏自适应 */
+            .tabs {
+                flex-wrap: wrap;
+                justify-content: center;
+            }
+            
+            /* 标签按钮适配 */
+            .tab-btn {
+                flex: 1;
+                min-width: 100px;
+                padding: var(--spacing-sm) var(--spacing-xs);
+                font-size: 14px;
+            }
+            
+            /* 卡片布局调整 */
+            .card {
+                padding: var(--spacing-md);
+            }
+            
+            /* 情绪选择器适配 */
+            .mood-selector {
+                grid-template-columns: repeat(4, 1fr);
+                gap: var(--spacing-xs);
+            }
+            
+            .mood-option {
+                padding: var(--spacing-sm);
+                min-height: 80px;
+            }
+            
+            /* 统计卡片适配 */
+            .stats-summary {
+                grid-template-columns: 1fr;
+            }
+            
+            /* 可视化网格适配 */
+            .visualization-grid {
+                grid-template-columns: 1fr;
+            }
+            
+            /* 提醒设置适配 */
+            .reminder-setting {
+                flex-direction: column;
+                align-items: stretch;
+                gap: var(--spacing-sm);
+            }
+            
+            /* 按钮适配 */
+            .entry-form button {
+                width: 100%;
+                padding: var(--spacing-md);
+            }
+            
+            /* 标题适配 */
+            h1 {
+                font-size: 24px;
+            }
+            
+            h2 {
+                font-size: 20px;
+            }
+            
+            /* 文本域适配 */
+            textarea {
+                min-height: 150px;
+            }
+            
+            /* 标签输入框适配 */
+            .tags-input {
+                padding: var(--spacing-sm);
+            }
+            
+            /* 历史记录条目适配 */
+            .entry-header {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: var(--spacing-xs);
+            }
+            
+            .entry-date {
+                font-size: 14px;
+            }
+        }
+        
+        /* 超小屏幕适配 */
+        @media (max-width: 480px) {
+            .container {
+                padding: var(--spacing-md);
+            }
+            
+            .tab-btn {
+                flex: 0 0 100%;
+                margin-bottom: var(--spacing-xs);
+            }
+            
+            .mood-selector {
+                grid-template-columns: repeat(3, 1fr);
+            }
+            
+            .mood-option {
+                min-height: 70px;
+                padding: var(--spacing-xs);
+            }
+            
+            .mood-option span {
+                font-size: 12px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📝 高级心情日记本</h1>
+        
+        <div class="tabs">
+            <button class="tab-btn active" onclick="switchTab('write')">✏️ 写日记</button>
+            <button class="tab-btn" onclick="switchTab('history')">📖 历史记录</button>
+            <button class="tab-btn" onclick="switchTab('statistics')">📊 数据分析</button>
+            <button class="tab-btn" onclick="switchTab('settings')">⚙️ 设置</button>
+        </div>
+        
+        <!-- 写日记标签页 -->
+        <div id="write-tab" class="tab-content active">
+            <div class="card">
+                <h2>记录你的心情</h2>
+                
+                <div class="guidance-questions">
+                    <h4>💡 可以这样开始：</h4>
+                    <ul>
+                        <li>今天最让我开心的事情是...</li>
+                        <li>我感到...因为...</li>
+                        <li>今天的挑战是...</li>
+                        <li>我学到了...</li>
+                    </ul>
+                </div>
+                
+                <div class="entry-form">
+                    <label for="entry-content">分享你的想法和感受：</label>
+                    <textarea id="entry-content" placeholder="开始记录你的心情..."></textarea>
+                    
+                    <label>选择当前心情：</label>
+                    <div class="mood-selector">
+                        <div class="mood-option happy" data-emotion="快乐" data-emoji="😊" data-effect-preview="烟花">快乐</div>
+                        <div class="mood-option excited" data-emotion="兴奋" data-emoji="🎉" data-effect-preview="礼花">兴奋</div>
+                        <div class="mood-option calm" data-emotion="平静" data-emoji="😌" data-effect-preview="波纹">平静</div>
+                        <div class="mood-option love" data-emotion="爱意" data-emoji="❤️" data-effect-preview="爱心">爱意</div>
+                        <div class="mood-option sad" data-emotion="悲伤" data-emoji="😢" data-effect-preview="雨滴">悲伤</div>
+                        <div class="mood-option angry" data-emotion="愤怒" data-emoji="😠" data-effect-preview="火焰">愤怒</div>
+                        <div class="mood-option anxious" data-emotion="焦虑" data-emoji="😨" data-effect-preview="电流">焦虑</div>
+                        <div class="mood-option stressed" data-emotion="压力" data-emoji="😫" data-effect-preview="碎片">压力</div>
+                    </div>
+                    
+                    <label>添加标签（用回车分隔）：</label>
+                    <div class="tags-input" id="tags-input">
+                        <input type="text" class="tag-input-field" placeholder="添加标签..." />
+                    </div>
+                    
+                    <button id="submit-button" onclick="submitEntry()">保存日记</button>
+                </div>
+            </div>
+            
+            <div id="emotion-result" class="card emotion-display" style="display: none;">
+                <div class="emotion-header">
+                    <h3>🔍 情绪分析结果</h3>
+                    <span id="emotion-badge" class="emotion-badge"></span>
+                </div>
+                
+                <div class="mood-intensity">
+                    <span>情绪强度：</span>
+                    <div class="intensity-bar">
+                        <div id="intensity-fill" class="intensity-fill"></div>
+                    </div>
+                </div>
+                
+                <div class="ai-response">
+                    <h4>🤖 智能回应</h4>
+                    <p id="ai-response-text"></p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 历史记录标签页 -->
+        <div id="history-tab" class="tab-content">
+            <div class="search-bar">
+                <input type="text" id="search-input" placeholder="搜索日记内容或标签..." />
+                <span class="search-icon">🔍</span>
+            </div>
+            
+            <div class="entries-container" id="entries-container">
+                <div class="loading">
+                    <div class="loading-spinner"></div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 数据分析标签页 -->
+        <div id="statistics-tab" class="tab-content">
+            <div class="stats-summary">
+                <div class="stat-card">
+                    <div class="stat-value" id="total-entries">0</div>
+                    <div class="stat-label">总日记数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="average-mood">0</div>
+                    <div class="stat-label">平均心情指数</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="most-frequent-emotion">--</div>
+                    <div class="stat-label">最常见情绪</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-value" id="streak-days">0</div>
+                    <div class="stat-label">连续记录天数</div>
+                </div>
+            </div>
+            
+            <div class="visualization-grid">
+                <div class="chart-wrapper">
+                    <h3>📈 心情变化趋势</h3>
+                    <div class="chart-container">
+                        <canvas id="moodChart"></canvas>
+                    </div>
+                </div>
+                
+                <div class="chart-wrapper">
+                    <h3>🎭 情绪分布</h3>
+                    <div class="chart-container">
+                        <canvas id="emotionChart"></canvas>
+                    </div>
+                </div>
+                
+
+            </div>
+            
+            <button class="export-button" onclick="exportData()">📥 导出数据</button>
+        </div>
+        
+        <!-- 设置标签页 -->
+        <div id="settings-tab" class="tab-content">
+            <div class="card">
+                <h2>⚙️ 应用设置</h2>
+                
+                <div class="reminder-setting">
+                    <input type="checkbox" id="enable-reminder" />
+                    <label for="enable-reminder">启用心情提醒</label>
+                    <select id="reminder-time">
+                        <option value="morning">早上</option>
+                        <option value="afternoon">下午</option>
+                        <option value="evening" selected>晚上</option>
+                    </select>
+                </div>
+                
+                <div style="margin-top: 20px;">
+                    <h3>📊 数据管理</h3>
+                    <button class="export-button" style="margin-top: 10px; background: #f44336;" onclick="clearData()">🗑️ 清除所有数据</button>
+                </div>
+                
+                <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
+                    <h3>ℹ️ 关于应用</h3>
+                    <p>高级心情日记本 v1.0</p>
+                    <p>一个帮助你记录、分析和改善心情的智能工具</p>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        const STORAGE_KEY = 'advanced_mood_diary';
+        let selectedMood = null;
+        let tags = [];
+        let moodChart = null;
+        let emotionChart = null;
+        let monthlyChart = null;
+        let tagsChart = null;
+        
+        // 初始化应用
+        function init() {
+            // 设置心情选择器事件
+            document.querySelectorAll('.mood-option').forEach(option => {
+                option.addEventListener('click', () => {
+                    document.querySelectorAll('.mood-option').forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    selectedMood = option.dataset.emotion;
+                });
+            });
+            
+            // 设置标签输入
+            const tagsInput = document.getElementById('tags-input');
+            const tagInputField = tagsInput.querySelector('.tag-input-field');
+            
+            tagInputField.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && tagInputField.value.trim()) {
+                    e.preventDefault();
+                    addTag(tagInputField.value.trim());
+                    tagInputField.value = '';
+                }
+            });
+            
+            // 搜索功能
+            document.getElementById('search-input').addEventListener('input', searchEntries);
+            
+            // 加载数据
+            loadEntries();
+            updateStatistics();
+            
+            // 检查提醒设置
+            checkReminderSetting();
+        }
+        
+        // 切换标签页
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-btn').forEach(tab => tab.classList.remove('active'));
+            document.querySelectorAll('.tab-content').forEach(content => content.classList.remove('active'));
+            
+            document.querySelector(`.tab-btn[onclick="switchTab('${tabId}')"]`).classList.add('active');
+            document.getElementById(`${tabId}-tab`).classList.add('active');
+            
+            // 如果切换到统计页，更新图表
+            if (tabId === 'statistics') {
+                updateCharts();
+            }
+        }
+        
+        // 添加标签
+        function addTag(tagText) {
+            if (tags.includes(tagText) || tags.length >= 5) return;
+            
+            tags.push(tagText);
+            renderTags();
+        }
+        
+        // 删除标签
+        function removeTag(tagText) {
+            tags = tags.filter(tag => tag !== tagText);
+            renderTags();
+        }
+        
+        // 渲染标签
+        function renderTags() {
+            const tagsInput = document.getElementById('tags-input');
+            const tagInputField = tagsInput.querySelector('.tag-input-field');
+            
+            tagsInput.innerHTML = '';
+            
+            tags.forEach(tag => {
+                const tagElement = document.createElement('div');
+                tagElement.className = 'tag';
+                tagElement.innerHTML = `${tag} <span class="tag-remove" onclick="removeTag('${tag}')">×</span>`;
+                tagsInput.appendChild(tagElement);
+            });
+            
+            tagsInput.appendChild(tagInputField);
+            tagInputField.focus();
+        }
+        
+        // 深度情绪分析
+        function analyzeEmotion(content) {
+            // 情绪关键词和权重
+            const emotionKeywords = {
+                '快乐': { keywords: ['开心', '快乐', '高兴', '愉快', '喜悦', '满足', '幸福', '兴奋', '棒', '好'], weight: 0.8 },
+                '兴奋': { keywords: ['激动', '兴奋', '惊喜', '期待', '紧张', '热血', '刺激', 'high'], weight: 0.9 },
+                '平静': { keywords: ['平静', '淡定', '安宁', '安静', '舒适', '放松', '轻松', '平和'], weight: 0.5 },
+                '中性': { keywords: ['一般', '普通', '平常', '正常', '还行', '可以'], weight: 0 },
+                '焦虑': { keywords: ['焦虑', '担心', '紧张', '不安', '压力', '烦躁', '烦恼', '纠结'], weight: -0.6 },
+                '悲伤': { keywords: ['难过', '伤心', '悲伤', '痛苦', '委屈', '失落', '沮丧', '绝望'], weight: -0.8 },
+                '愤怒': { keywords: ['生气', '愤怒', '恼火', '气愤', '不满', '讨厌', '恨'], weight: -0.9 },
+                '疲惫': { keywords: ['累', '疲惫', '疲倦', '乏力', '困', '想睡觉', '没精神'], weight: -0.5 }
+            };
+            
+            // 如果用户手动选择了心情，优先使用
+            if (selectedMood) {
+                const emotion = selectedMood;
+                const intensity = Math.min(1, Math.max(0.3, content.length / 100));
+                const score = emotionKeywords[emotion].weight * intensity;
+                
+                return {
+                    emotion: emotion,
+                    score: score,
+                    intensity: intensity,
+                    color: getEmotionColor(emotion)
+                };
+            }
+            
+            // 基于文本内容分析
+            let bestMatch = { emotion: '中性', score: 0, count: 0 };
+            
+            for (const [emotion, data] of Object.entries(emotionKeywords)) {
+                let count = 0;
+                
+                data.keywords.forEach(keyword => {
+                    const regex = new RegExp(keyword, 'gi');
+                    const matches = content.match(regex);
+                    if (matches) count += matches.length;
+                });
+                
+                const score = count * data.weight;
+                
+                if (count > bestMatch.count || (count === bestMatch.count && Math.abs(score) > Math.abs(bestMatch.score))) {
+                    bestMatch = { emotion, score, count };
+                }
+            }
+            
+            // 计算强度（基于关键词出现次数和文本长度）
+            const intensity = Math.min(1, Math.max(0.1, (bestMatch.count + 1) / (content.length / 30 + 1)));
+            const finalScore = bestMatch.score * intensity;
+            
+            return {
+                emotion: bestMatch.emotion,
+                score: finalScore,
+                intensity: intensity,
+                color: getEmotionColor(bestMatch.emotion)
+            };
+        }
+        
+        // 获取情绪对应的颜色
+        function getEmotionColor(emotion) {
+            const colorMap = {
+                '快乐': 'var(--happy-color)',
+                '兴奋': 'var(--excited-color)',
+                '平静': 'var(--calm-color)',
+                '中性': 'var(--neutral-color)',
+                '焦虑': 'var(--anxious-color)',
+                '悲伤': 'var(--sad-color)',
+                '愤怒': 'var(--angry-color)',
+                '疲惫': 'var(--tired-color)'
+            };
+            return colorMap[emotion] || 'var(--neutral-color)';
+        }
+        
+        // 生成智能AI回应
+        function generateAIResponse(content, emotion) {
+            const responses = {
+                '快乐': [
+                    '太棒了！看到你这么开心，我也跟着快乐起来了。能和我分享一下是什么让你如此快乐吗？',
+                    '快乐是最美好的情绪之一！保持这份好心情，它会给你带来更多积极的能量。',
+                    '你的快乐感染到我了！继续保持这样的心态，每一天都会充满阳光。',
+                    '快乐是会传染的，希望你的快乐能传递给更多人。今天有什么特别的事情发生吗？',
+                    '为你的好心情点赞！快乐时光总是值得珍惜和记录的。'
+                ],
+                '兴奋': [
+                    '哇！你的兴奋之情溢于言表。有什么令人期待的事情即将发生吗？',
+                    '这种兴奋的感觉真是太棒了！尽情享受这份激动人心的时刻吧。',
+                    '能感受到你内心的激动！期待和好奇是生活中最美好的感觉之一。',
+                    '兴奋是行动的动力！你的热情一定会带来美好的结果。',
+                    '这种热血沸腾的感觉真让人向往！记得记录下这个特别的时刻。'
+                ],
+                '平静': [
+                    '平静是一种珍贵的状态。在这个快节奏的世界里，能够保持内心的安宁是一种智慧。',
+                    '平静如湖水，清澈而深邃。这样的时刻很适合思考和自我反思。',
+                    '有时候，平静比任何激动人心的情绪都更有力量。享受这份宁静吧。',
+                    '内心的平静是最好的休息。今天一定度过了充实而平和的一天。',
+                    '平静的状态往往能带来最清晰的思考。这样的日子也很美好。'
+                ],
+                '中性': [
+                    '平平淡淡才是真。有时候，平凡的日子也有它独特的魅力。',
+                    '普通的一天也值得记录。生活就是由这些看似平凡的时刻组成的。',
+                    '今天虽然没有特别的起伏，但也是人生旅程中的重要一站。',
+                    '平静的日子为明天的精彩埋下伏笔。期待你接下来的故事。',
+                    '每一个普通的日子，都是生命中不可或缺的一部分。'
+                ],
+                '焦虑': [
+                    '我理解你的焦虑。深呼吸，试着将注意力集中在当下，一步一步解决问题。',
+                    '焦虑是正常的情绪反应。试着写下让你焦虑的事情，然后制定一个小计划来应对。',
+                    '每个人都会有焦虑的时候。记得照顾好自己，适当休息，做些让自己放松的事情。',
+                    '焦虑往往源于对未来的担忧。试着专注于你能控制的事情，其他的交给时间。',
+                    '感到焦虑时，不妨试试冥想或轻度运动，它们能帮助你平静下来。'
+                ],
+                '悲伤': [
+                    '难过的时候，允许自己悲伤是很重要的。时间会慢慢治愈一切，你并不孤单。',
+                    '我能感受到你的悲伤。记得你身边有关心你的人，不要独自承受这份痛苦。',
+                    '悲伤是心灵的雨水，虽然会暂时打湿我们，但也会让我们的心灵更加柔软和坚强。',
+                    '每个人都有难过的时候，这是成长的一部分。给自己一些时间和空间。',
+                    '想哭就哭出来吧，释放情绪后，你会感觉好一些的。记得要好好照顾自己。'
+                ],
+                '愤怒': [
+                    '愤怒是一种强烈的情绪信号，它在告诉你有些事情需要改变。试着找到健康的方式来表达和释放。',
+                    '我理解你的愤怒。深呼吸，给自己一点时间冷静下来，然后再思考如何处理让你生气的事情。',
+                    '愤怒往往掩盖着其他情绪，比如失望或受伤。试着理解愤怒背后的真正原因。',
+                    '每个人都会有生气的时候，这是正常的。重要的是如何以建设性的方式回应这种情绪。',
+                    '当你感到愤怒时，不妨先离开触发情绪的环境，做些让自己冷静的事情。'
+                ],
+                '疲惫': [
+                    '疲惫是身体在提醒你需要休息了。给自己一些时间放松和恢复，你值得被好好对待。',
+                    '我能感受到你的疲惫。今天一定很辛苦吧？记得早点休息，明天又是新的开始。',
+                    '偶尔的疲惫是正常的，但如果长期感到疲惫，可能需要调整生活节奏了。',
+                    '休息不是浪费时间，而是为了更好地前进。好好睡一觉，醒来后会感觉好多了。',
+                    '疲惫时，试着做些让自己舒服的事情，比如洗个热水澡、听喜欢的音乐或看一部轻松的电影。'
+                ]
+            };
+            
+            // 基于内容生成更个性化的回应
+            const emotionResponses = responses[emotion] || responses['中性'];
+            
+            // 简单的内容分析，提供更相关的回应
+            let responseIndex = Math.floor(Math.random() * emotionResponses.length);
+            
+            // 根据文本长度调整回应
+            if (content.length > 100) {
+                // 长文本，选择更有深度的回应
+                responseIndex = Math.min(responseIndex + 2, emotionResponses.length - 1);
+            }
+            
+            return emotionResponses[responseIndex];
+        }
+        
+        // 保存日记条目到本地存储
+        function saveEntry(entry) {
+            let entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            const timestamp = new Date().toISOString();
+            entries[timestamp] = entry;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+            return timestamp;
+        }
+        
+        // 提交日记
+        async function submitEntry() {
+            const content = document.getElementById('entry-content').value.trim();
+            
+            if (!content) {
+                alert('请输入日记内容！');
+                return;
+            }
+            
+            // 显示加载状态
+            const submitButton = document.getElementById('submit-button');
+            submitButton.disabled = true;
+            submitButton.textContent = '分析中...';
+            
+            // 模拟分析延迟，提升用户体验
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // 分析情绪
+            const emotion = analyzeEmotion(content);
+            
+            // 生成AI回应
+            const aiResponse = generateAIResponse(content, emotion.emotion);
+            
+            // 创建新条目
+            const newEntry = {
+                content: content,
+                emotion: emotion,
+                aiResponse: aiResponse,
+                tags: [...tags],
+                timestamp: new Date().toISOString()
+            };
+            
+            // 保存条目
+            saveEntry(newEntry);
+            
+            // 显示情绪分析结果
+            const emotionResult = document.getElementById('emotion-result');
+            const emotionBadge = document.getElementById('emotion-badge');
+            const aiResponseText = document.getElementById('ai-response-text');
+            const intensityFill = document.getElementById('intensity-fill');
+            
+            emotionBadge.textContent = `情绪：${emotion.emotion}`;
+            emotionBadge.style.backgroundColor = emotion.color;
+            aiResponseText.textContent = aiResponse;
+            intensityFill.style.width = `${emotion.intensity * 100}%`;
+            intensityFill.style.backgroundColor = emotion.color;
+            
+            emotionResult.style.display = 'block';
+            
+            // 重置表单
+            document.getElementById('entry-content').value = '';
+            document.querySelectorAll('.mood-option').forEach(opt => opt.classList.remove('selected'));
+            selectedMood = null;
+            tags = [];
+            renderTags();
+            
+            // 恢复按钮状态
+            submitButton.disabled = false;
+            submitButton.textContent = '保存日记';
+            
+            // 重新加载记录和统计
+            loadEntries();
+            updateStatistics();
+            updateCharts();
+        }
+        
+        // 加载历史记录
+        function loadEntries() {
+            const entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            const container = document.getElementById('entries-container');
+            
+            container.innerHTML = '';
+            
+            if (Object.keys(entries).length === 0) {
+                container.innerHTML = '<div class="no-data-message">还没有日记记录，开始记录你的第一条心情吧！</div>';
+                return;
+            }
+            
+            // 按时间倒序排序
+            const sortedEntries = Object.entries(entries).sort((a, b) => 
+                new Date(b[0]) - new Date(a[0])
+            );
+            
+            sortedEntries.forEach(([timestamp, entry]) => {
+                const entryElement = document.createElement('div');
+                entryElement.className = 'entry-item';
+                entryElement.dataset.content = entry.content.toLowerCase();
+                entryElement.dataset.tags = entry.tags.join(' ').toLowerCase();
+                
+                // 格式化日期
+                const date = new Date(timestamp);
+                const formattedDate = date.toLocaleString('zh-CN', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                });
+                
+                // 标签HTML
+                const tagsHtml = entry.tags.length > 0 ? 
+                    `<div class="entry-tags">${entry.tags.map(tag => `<span class="entry-tag">${tag}</span>`).join('')}</div>` : '';
+                
+                entryElement.innerHTML = `
+                    <div class="entry-header">
+                        <span class="entry-date">${formattedDate}</span>
+                        <span class="emotion-badge" style="background-color: ${entry.emotion.color};">
+                            ${entry.emotion.emotion}
+                        </span>
+                    </div>
+                    ${tagsHtml}
+                    <div class="entry-content">${entry.content}</div>
+                    <div class="ai-response">
+                        <h4>🤖 AI 回应：</h4>
+                        <p>${entry.aiResponse}</p>
+                    </div>
+                `;
+                
+                container.appendChild(entryElement);
+            });
+        }
+        
+        // 搜索日记
+        function searchEntries() {
+            const searchTerm = document.getElementById('search-input').value.toLowerCase();
+            const entries = document.querySelectorAll('.entry-item');
+            
+            entries.forEach(entry => {
+                const content = entry.dataset.content;
+                const tags = entry.dataset.tags;
+                
+                if (content.includes(searchTerm) || tags.includes(searchTerm)) {
+                    entry.style.display = 'block';
+                } else {
+                    entry.style.display = 'none';
+                }
+            });
+        }
+        
+        // 更新统计信息
+        function updateStatistics() {
+            const entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            const entryValues = Object.values(entries);
+            
+            // 更新总日记数
+            document.getElementById('total-entries').textContent = entryValues.length;
+            
+            if (entryValues.length === 0) return;
+            
+            // 计算平均心情指数
+            const totalScore = entryValues.reduce((sum, entry) => sum + entry.emotion.score, 0);
+            const averageScore = totalScore / entryValues.length;
+            document.getElementById('average-mood').textContent = averageScore.toFixed(1);
+            
+            // 计算最常见情绪
+            const emotionCounts = {};
+            entryValues.forEach(entry => {
+                emotionCounts[entry.emotion.emotion] = (emotionCounts[entry.emotion.emotion] || 0) + 1;
+            });
+            
+            let mostFrequent = { emotion: '', count: 0 };
+            for (const [emotion, count] of Object.entries(emotionCounts)) {
+                if (count > mostFrequent.count) {
+                    mostFrequent = { emotion, count };
+                }
+            }
+            document.getElementById('most-frequent-emotion').textContent = mostFrequent.emotion;
+            
+            // 计算连续记录天数
+            const streakDays = calculateStreakDays(entryValues);
+            document.getElementById('streak-days').textContent = streakDays;
+        }
+        
+        // 计算连续记录天数
+        function calculateStreakDays(entries) {
+            if (entries.length === 0) return 0;
+            
+            // 按日期排序
+            const sortedEntries = [...entries].sort((a, b) => 
+                new Date(b.timestamp) - new Date(a.timestamp)
+            );
+            
+            let streak = 0;
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            
+            for (let i = 0; i < sortedEntries.length; i++) {
+                const entryDate = new Date(sortedEntries[i].timestamp);
+                entryDate.setHours(0, 0, 0, 0);
+                
+                const diffTime = Math.abs(today - entryDate);
+                const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+                
+                if (diffDays === i) {
+                    streak++;
+                } else {
+                    break;
+                }
+            }
+            
+            return streak;
+        }
+        
+        // 更新图表
+        function updateCharts() {
+            updateMoodChart();
+            updateEmotionChart();
+        }
+        
+        // 更新心情趋势图
+        function updateMoodChart() {
+            const entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            const container = document.getElementById('moodChart').parentNode;
+            
+            // 如果数据不足，显示提示信息
+            if (Object.keys(entries).length < 2) {
+                container.innerHTML = '<div class="no-data-message">需要至少两条日记记录才能生成趋势图</div>';
+                container.innerHTML += '<canvas id="moodChart"></canvas>';
+                return;
+            }
+            
+            // 提取数据（最多显示30条）
+            const sortedEntries = Object.entries(entries).sort((a, b) => 
+                new Date(a[0]) - new Date(b[0])
+            ).slice(-30);
+            
+            const labels = [];
+            const scores = [];
+            const backgroundColors = [];
+            
+            sortedEntries.forEach(([timestamp, entry]) => {
+                const date = new Date(timestamp);
+                const formattedDate = date.toLocaleDateString('zh-CN', {
+                    month: '2-digit',
+                    day: '2-digit'
+                });
+                labels.push(formattedDate);
+                scores.push(entry.emotion.score);
+                backgroundColors.push(entry.emotion.color);
+            });
+            
+            // 销毁现有图表
+            if (moodChart) {
+                moodChart.destroy();
+            }
+            
+            // 创建新图表
+            const ctx = document.getElementById('moodChart').getContext('2d');
+            moodChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: '心情分数',
+                        data: scores,
+                        backgroundColor: 'rgba(102, 126, 234, 0.2)',
+                        borderColor: 'rgba(102, 126, 234, 1)',
+                        borderWidth: 2,
+                        pointBackgroundColor: backgroundColors,
+                        pointBorderColor: '#fff',
+                        pointRadius: 6,
+                        pointHoverRadius: 8,
+                        tension: 0.3,
+                        fill: true
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: '心情变化趋势'
+                        },
+                        legend: {
+                            display: false
+                        }
+                    },
+                    scales: {
+                        y: {
+                            min: -1.2,
+                            max: 1.2,
+                            title: {
+                                display: true,
+                                text: '心情分数 (-1 到 1)'
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // 更新情绪分布饼图
+        function updateEmotionChart() {
+            const entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            const container = document.getElementById('emotionChart').parentNode;
+            
+            if (Object.keys(entries).length === 0) {
+                container.innerHTML = '<div class="no-data-message">暂无数据</div>';
+                container.innerHTML += '<canvas id="emotionChart"></canvas>';
+                return;
+            }
+            
+            // 统计情绪分布
+            const emotionCounts = {};
+            const emotionColors = {};
+            
+            Object.values(entries).forEach(entry => {
+                emotionCounts[entry.emotion.emotion] = (emotionCounts[entry.emotion.emotion] || 0) + 1;
+                emotionColors[entry.emotion.emotion] = entry.emotion.color;
+            });
+            
+            const emotions = Object.keys(emotionCounts);
+            const counts = Object.values(emotionCounts);
+            const colors = emotions.map(emotion => emotionColors[emotion]);
+            
+            // 销毁现有图表
+            if (emotionChart) {
+                emotionChart.destroy();
+            }
+            
+            // 创建新图表
+            const ctx = document.getElementById('emotionChart').getContext('2d');
+            emotionChart = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: emotions,
+                    datasets: [{
+                        data: counts,
+                        backgroundColor: colors,
+                        borderWidth: 2,
+                        borderColor: '#fff'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'right'
+                        }
+                    }
+                }
+            });
+        }
+        
+
+
+        
+        // 导出数据
+        function exportData() {
+            const entries = JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}');
+            
+            if (Object.keys(entries).length === 0) {
+                alert('没有数据可导出！');
+                return;
+            }
+            
+            // 转换为CSV格式
+            let csvContent = '日期,心情,心情分数,情绪强度,内容,标签\n';
+            
+            Object.entries(entries).forEach(([timestamp, entry]) => {
+                const date = new Date(timestamp).toLocaleString('zh-CN');
+                const tags = entry.tags.join(';');
+                const content = entry.content.replace(/"/g, '""');
+                
+                csvContent += `"${date}","${entry.emotion.emotion}",${entry.emotion.score.toFixed(2)},${entry.emotion.intensity.toFixed(2)},"${content}","${tags}"\n`;
+            });
+            
+            // 创建下载链接
+            const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            const link = document.createElement('a');
+            
+            if (link.download !== undefined) {
+                const url = URL.createObjectURL(blob);
+                link.setAttribute('href', url);
+                link.setAttribute('download', `心情日记_${new Date().toISOString().split('T')[0]}.csv`);
+                link.style.visibility = 'hidden';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        }
+        
+        // 清除数据
+        function clearData() {
+            if (confirm('确定要清除所有日记数据吗？此操作不可恢复！')) {
+                localStorage.removeItem(STORAGE_KEY);
+                loadEntries();
+                updateStatistics();
+                updateCharts();
+                alert('数据已清除！');
+            }
+        }
+        
+        // 设置提醒
+        function checkReminderSetting() {
+            const enableReminder = localStorage.getItem('enable_reminder') === 'true';
+            const reminderTime = localStorage.getItem('reminder_time') || 'evening';
+            
+            document.getElementById('enable-reminder').checked = enableReminder;
+            document.getElementById('reminder-time').value = reminderTime;
+            
+            // 保存设置变化
+            document.getElementById('enable-reminder').addEventListener('change', (e) => {
+                localStorage.setItem('enable_reminder', e.target.checked);
+                setupReminder();
+            });
+            
+            document.getElementById('reminder-time').addEventListener('change', (e) => {
+                localStorage.setItem('reminder_time', e.target.value);
+                setupReminder();
+            });
+        }
+        
+        // 设置提醒逻辑
+        function setupReminder() {
+            const enableReminder = localStorage.getItem('enable_reminder') === 'true';
+            
+            if (enableReminder) {
+                // 这里可以添加浏览器提醒逻辑
+                // 由于浏览器限制，实际的提醒需要用户交互触发
+                console.log('提醒已设置');
+            }
+        }
+        
+        // 页面加载完成后初始化
+        window.addEventListener('DOMContentLoaded', init);
+    </script>
+</body>
+</html>
